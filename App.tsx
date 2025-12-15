@@ -1,13 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, ChevronDown } from 'lucide-react';
+import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, ChevronDown, Eye, Maximize2, Edit3 } from 'lucide-react';
 import Navigation from './components/Navigation';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES, GLOBAL_TRAINING_CATEGORIES } from './constants';
-import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions } from './services/geminiService';
+import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule } from './services/geminiService';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -15,6 +15,9 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showNewTipAlert, setShowNewTipAlert] = useState<WeeklyTip | null>(null);
   const [settingsSaved, setSettingsSaved] = useState(false);
+
+  // --- Quick View State ---
+  const [quickViewData, setQuickViewData] = useState<{ title: string; content: string } | null>(null);
 
   // --- User Profile State ---
   const [userProfile, setUserProfile] = useState<UserProfile>(() => {
@@ -56,7 +59,9 @@ function App() {
   const [suggestedTopics, setSuggestedTopics] = useState<string[]>([]);
   const [isSuggestingTopics, setIsSuggestingTopics] = useState(false);
   const [showTopicSuggestions, setShowTopicSuggestions] = useState(false);
-  const trainingInputRef = useRef<HTMLInputElement>(null);
+  // Refinement State
+  const [refineInstruction, setRefineInstruction] = useState('');
+  const [isRefining, setIsRefining] = useState(false);
 
   // --- Report Analyzer State ---
   const [reportText, setReportText] = useState('');
@@ -248,9 +253,20 @@ function App() {
     if (!trainingTopic) return;
     setShowTopicSuggestions(false);
     setIsTrainingLoading(true);
-    const content = await generateTrainingModule(trainingRole, trainingTopic);
+    // Pass current content as context for systematic progression
+    const content = await generateTrainingModule(trainingRole, trainingTopic, trainingContent);
     setTrainingContent(content);
     setIsTrainingLoading(false);
+    setRefineInstruction(''); // Clear previous refinement instruction
+  };
+
+  const handleRefineTraining = async () => {
+    if (!refineInstruction.trim() || !trainingContent) return;
+    setIsRefining(true);
+    const refinedContent = await refineTrainingModule(trainingContent, refineInstruction);
+    setTrainingContent(refinedContent);
+    setIsRefining(false);
+    setRefineInstruction('');
   };
 
   const handleGetTrainingSuggestions = async () => {
@@ -393,7 +409,10 @@ function App() {
       .replace(/\n\n\n+/g, '\n\n')
       .trim();
 
-    const fullText = alertPrefix + formattedContent;
+    // Professional Footer for the message
+    const footer = `\n\n_– Sent via CEO Advisory App_`;
+    const fullText = alertPrefix + formattedContent + footer;
+
     navigator.clipboard.writeText(fullText).catch(err => console.error('Clipboard copy failed', err));
     
     if (type === 'whatsapp') {
@@ -419,6 +438,34 @@ function App() {
   };
 
   // --- Render Content Areas ---
+
+  const renderQuickViewModal = () => {
+    if (!quickViewData) return null;
+    return (
+      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+        <div className="bg-slate-900 rounded-2xl border border-slate-700 shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              <Eye size={24} className="text-blue-400" />
+              {quickViewData.title}
+            </h2>
+            <div className="flex gap-2">
+              <ShareButton content={quickViewData.content} title={quickViewData.title} />
+              <button 
+                onClick={() => setQuickViewData(null)}
+                className="p-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-8 scrollbar-hide bg-slate-900/50">
+            <MarkdownRenderer content={quickViewData.content} />
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderSettingsModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -589,7 +636,10 @@ function App() {
             </p>
             
             <button 
-              onClick={() => sendToCEO('whatsapp', showNewTipAlert)}
+              onClick={(e) => {
+                e.preventDefault();
+                sendToCEO('whatsapp', showNewTipAlert);
+              }}
               className="w-full flex items-center justify-center gap-3 bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg transition-colors"
             >
               <MessageCircle size={24} />
@@ -597,7 +647,10 @@ function App() {
             </button>
             
             <button 
-              onClick={() => sendToCEO('email', showNewTipAlert)}
+              onClick={(e) => {
+                e.preventDefault();
+                sendToCEO('email', showNewTipAlert);
+              }}
               className="w-full flex items-center justify-center gap-3 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-medium transition-colors"
             >
               <Mail size={20} />
@@ -683,6 +736,22 @@ function App() {
         </div>
       </div>
       
+      {/* Incident Trends Chart */}
+      {storedReports.length > 0 && (
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold text-white flex items-center gap-2">
+              <BarChart2 size={18} className="text-blue-400" />
+              Incident Trends
+            </h3>
+             <button onClick={() => setCurrentView(View.REPORT_ANALYZER)} className="text-xs text-blue-400 hover:text-white font-medium">View Full Analysis</button>
+          </div>
+          <div className="-mb-6">
+             <IncidentChart reports={storedReports} />
+          </div>
+        </div>
+      )}
+
       {/* Recent Activity Mockup */}
       <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6">
         <h3 className="font-bold text-white mb-4 flex items-center gap-2">
@@ -1042,12 +1111,22 @@ function App() {
                   <h4 className="text-sm font-bold text-slate-200 group-hover:text-yellow-400 line-clamp-1">{tip.topic}</h4>
                   <p className="text-xs text-slate-500 line-clamp-2 mt-1">{tip.content.substring(0, 80)}...</p>
                 </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); handleDeleteTip(tip.id); }}
-                  className="absolute top-2 right-2 p-1.5 text-slate-600 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 size={14} />
-                </button>
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                   <button 
+                    onClick={(e) => { e.stopPropagation(); sendToCEO('whatsapp', tip); }}
+                    className="p-1.5 text-slate-600 hover:text-green-400 transition-colors"
+                    title="Send via WhatsApp"
+                  >
+                    <MessageCircle size={14} />
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteTip(tip.id); }}
+                    className="p-1.5 text-slate-600 hover:text-red-400 transition-colors"
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1169,7 +1248,7 @@ function App() {
               </div>
             )}
             
-            {/* AI Chips (Only show if NOT typing/searching to avoid clutter, or always show?) -> Showing when suggestions closed or empty */}
+            {/* AI Chips */}
             {!showTopicSuggestions && suggestedTopics.length > 0 && (
                  <div className="flex flex-wrap gap-2 mt-3">
                    <span className="text-xs text-slate-500 flex items-center gap-1"><Sparkles size={12} /> AI Suggestions:</span>
@@ -1233,11 +1312,43 @@ function App() {
                   {saveSuccess ? <Check size={16} /> : <Save size={16} />}
                   {saveSuccess ? 'Saved!' : 'Save as Template'}
                 </button>
+                <button
+                  onClick={() => setQuickViewData({ title: trainingTopic, content: trainingContent })}
+                  className="p-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
+                  title="Quick View (Full Screen)"
+                >
+                  <Maximize2 size={16} />
+                </button>
                 <ShareButton content={trainingContent} title={`Training: ${trainingTopic}`} />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto scrollbar-hide pr-2">
+            
+            <div className="flex-1 overflow-y-auto scrollbar-hide pr-2 mb-4">
               <MarkdownRenderer content={trainingContent} />
+            </div>
+
+            {/* Refinement / Follow-up Input */}
+            <div className="pt-4 border-t border-slate-800">
+               <label className="text-xs font-bold text-slate-500 uppercase flex items-center gap-2 mb-2">
+                 <Edit3 size={12} /> Refine or Follow Up
+               </label>
+               <div className="flex gap-2">
+                 <input 
+                   type="text"
+                   value={refineInstruction}
+                   onChange={(e) => setRefineInstruction(e.target.value)}
+                   onKeyDown={(e) => e.key === 'Enter' && handleRefineTraining()}
+                   placeholder="e.g. Add a 5-question quiz, make it shorter, or focus on night shift..."
+                   className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+                 />
+                 <button 
+                   onClick={handleRefineTraining}
+                   disabled={isRefining || !refineInstruction}
+                   className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-2 rounded-lg text-sm font-bold transition-colors"
+                 >
+                   {isRefining ? <RefreshCw className="animate-spin" size={16} /> : <Send size={16} />}
+                 </button>
+               </div>
             </div>
           </div>
         )}
@@ -1343,8 +1454,17 @@ function App() {
                     <h4 className="text-sm font-bold text-slate-400 mb-3">Recent Archive</h4>
                     <div className="space-y-2">
                       {storedReports.slice(0, 5).map(report => (
-                        <div key={report.id} className="text-xs text-slate-500 border-l-2 border-slate-700 pl-3 py-1">
-                          <span className="text-slate-300 font-bold">{report.dateStr}:</span> {report.content.substring(0, 60)}...
+                        <div key={report.id} className="text-xs text-slate-500 border-l-2 border-slate-700 pl-3 py-1 flex justify-between items-start group">
+                          <div>
+                            <span className="text-slate-300 font-bold">{report.dateStr}:</span> {report.content.substring(0, 50)}...
+                          </div>
+                          <button 
+                            onClick={() => setQuickViewData({ title: `Report: ${report.dateStr}`, content: report.content + "\n\n***\n\n**AI Analysis:**\n" + report.analysis })}
+                            className="text-slate-600 hover:text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Quick View Report"
+                          >
+                            <Eye size={14} />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1384,7 +1504,14 @@ function App() {
         {/* Static Templates */}
         {STATIC_TEMPLATES.map(template => (
           <div key={template.id} className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-blue-500 transition-colors group relative">
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-4 right-4 flex gap-2">
+              <button
+                onClick={() => setQuickViewData({ title: template.title, content: template.content })}
+                className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white rounded-lg transition-colors"
+                title="Quick View"
+              >
+                <Eye size={16} />
+              </button>
               <ShareButton content={template.content} title={template.title} />
             </div>
             <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-900/30 transition-colors">
@@ -1402,13 +1529,20 @@ function App() {
         {customTemplates.map(template => (
           <div key={template.id} className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-emerald-500 transition-colors group relative">
             <div className="absolute top-4 right-4 flex gap-2">
+               <button
+                  onClick={() => setQuickViewData({ title: template.title, content: template.content })}
+                  className="p-2 bg-slate-700 hover:bg-slate-600 text-slate-400 hover:text-white rounded-lg transition-colors"
+                  title="Quick View"
+                >
+                  <Eye size={16} />
+                </button>
+               <ShareButton content={template.content} title={template.title} />
                <button 
                   onClick={() => handleDeleteTemplate(template.id)}
                   className="p-2 bg-slate-700 hover:bg-red-900/50 hover:text-red-400 text-slate-400 rounded-lg transition-colors"
                 >
                   <Trash2 size={16} />
                 </button>
-               <ShareButton content={template.content} title={template.title} />
             </div>
             <div className="w-12 h-12 bg-slate-700 rounded-lg flex items-center justify-center mb-4 group-hover:bg-emerald-900/30 transition-colors">
               <Briefcase size={24} className="text-emerald-400" />
@@ -1471,6 +1605,7 @@ function App() {
         {showNewTipAlert && renderNewTipAlertModal()}
         {showKbModal && renderKbModal()}
         {showBpToast && renderToast()}
+        {quickViewData && renderQuickViewModal()}
       </main>
     </div>
   );

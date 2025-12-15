@@ -29,21 +29,35 @@ export const generateAdvisorResponse = async (
 
       CURRENT USER QUESTION:
       ${currentMessage}
+      
+      INSTRUCTION:
+      You have access to the entire internet via Google Search.
+      If the user asks about current events, laws, news, facts, or anything outside of your internal knowledge, USE THE GOOGLE SEARCH TOOL to provide the most accurate, up-to-date response possible.
     `;
 
-    // Using gemini-3-pro-preview for deep reasoning as an Advisor
+    // Using gemini-3-pro-preview for deep reasoning AND Internet Access (Google Search)
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
       contents: fullPrompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTION_ADVISOR,
+        tools: [{ googleSearch: {} }], // Enable the "Internet Brain"
+        thinkingConfig: { thinkingBudget: 2048 }, // Enable "Chain of Thought" reasoning for a "bigger brain"
       }
     });
 
-    return { text: response.text || "I couldn't generate a response." };
+    // Extract Grounding Sources (URLs) from the response
+    const sources = response.candidates?.[0]?.groundingMetadata?.groundingChunks
+      ?.filter((chunk: any) => chunk.web?.uri)
+      .map((chunk: any) => ({
+        title: chunk.web.title,
+        url: chunk.web.uri
+      })) || [];
+
+    return { text: response.text || "I couldn't generate a response.", sources };
   } catch (error) {
     console.error("Advisor Error:", error);
-    return { text: "I am having trouble connecting to my secure knowledge base. Please check your internet connection." };
+    return { text: "I am having trouble connecting to the internet or my knowledge base. Please check your connection." };
   }
 };
 
@@ -78,10 +92,16 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
   }
 };
 
-// Training Generator
-export const generateTrainingModule = async (audience: string, topic: string): Promise<string> => {
+// Training Generator - Context Aware
+export const generateTrainingModule = async (audience: string, topic: string, previousContext?: string): Promise<string> => {
   try {
-    const prompt = `Create a professional security training module for ${audience} on the topic: "${topic}". Ensure it includes the AntiRisk Management signature.`;
+    // If previous context exists, we pass it to allow systematic progression
+    const contextPrompt = previousContext 
+      ? `\n\nPREVIOUS MODULE CONTEXT:\n${previousContext.substring(0, 1500)}...\n\nINSTRUCTION: Analyze the previous module above. If the new topic "${topic}" is related, treat this as a SYSTEMATIC FOLLOW-UP (e.g., Level 2 or Next Steps). Reference concepts from the previous module to ensure curriculum continuity. If unrelated, ignore context.` 
+      : "";
+
+    const prompt = `Create a professional security training module for ${audience} on the topic: "${topic}".${contextPrompt} Ensure it includes the AntiRisk Management signature.`;
+    
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
@@ -96,6 +116,38 @@ export const generateTrainingModule = async (audience: string, topic: string): P
   }
 };
 
+// Refine Training Module (Follow-up)
+export const refineTrainingModule = async (currentContent: string, instruction: string): Promise<string> => {
+  try {
+    const prompt = `
+      You are the Security Training Architect.
+      
+      CURRENT MODULE CONTENT:
+      ${currentContent}
+
+      USER REFINEMENT INSTRUCTION:
+      "${instruction}"
+
+      TASK:
+      Rewrite the training module to incorporate the user's instruction. 
+      Maintain the same professional structure (Title, Objectives, Outline, etc.) unless specifically asked to change it.
+      Ensure the content remains systematically on topic.
+    `;
+
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview', // Pro for better rewriting/editing capabilities
+      contents: prompt,
+      config: {
+        systemInstruction: SYSTEM_INSTRUCTION_TRAINER
+      }
+    });
+    return response.text || "Failed to refine content.";
+  } catch (error) {
+    console.error("Refine Training Error:", error);
+    return "Error refining training content.";
+  }
+};
+
 // Training Topic Suggestions
 export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
   try {
@@ -103,9 +155,11 @@ export const getTrainingSuggestions = async (recentReports: StoredReport[]): Pro
       ? `RECENT INTERNAL INCIDENTS:\n${recentReports.slice(0, 5).map(r => `- ${r.content.substring(0, 100)}...`).join('\n')}`
       : "NO RECENT INTERNAL INCIDENTS.";
 
+    // Use specific memory bank categories for suggestion context
     const prompt = `
-      Based on the following context, suggest 3 specific, high-value training topics for security guards.
+      Based on the following context and the Global Security Category Memory Bank, suggest 3 specific, high-value training topics for security guards.
       
+      CONTEXT:
       1. ${context}
       2. CURRENT GLOBAL SECURITY TRENDS (e.g., De-escalation, Access Control, Cyber-Physical hygiene).
 
@@ -120,7 +174,10 @@ export const getTrainingSuggestions = async (recentReports: StoredReport[]): Pro
     });
 
     const text = response.text || "";
-    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0);
+    // Robust cleaning: remove newlines, remove Markdown bolding, then split
+    const cleanText = text.replace(/\n/g, '').replace(/\*\*/g, '').replace(/^\d+\.\s*/g, ''); 
+    
+    return cleanText.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
   } catch (error) {
     console.error("Suggestion Error:", error);
     return ["Access Control Basics", "Report Writing 101", "Emergency Response"]; // Fallbacks

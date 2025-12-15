@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    
+    <!-- Shield Shape -->
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M12,1L3,5v6c0,5.55 3.84,10.74 9,12c5.16,-1.26 9,-6.45 9,-12V5L12,1z"/>
+    
+    <!-- Inner Design (Optional Monogram or Check) -->
+    <path
+        android:fillColor="#0A0F2C"
+        android:pathData="M12,4L5,7v4c0,4 2.5,8 7,9.5c4.5,-1.5 7,-5.5 7,-9.5V7L12,4z"/>
+        
+    <!-- AR Text (Abstract) -->
+    <path
+        android:fillColor="#D4AF37"
+        android:pathData="M12,6 L14,12 H10 Z M12,16 L12,16"/>
+</vector>
