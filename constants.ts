@@ -1,26 +1,17 @@
 
 import { Template } from './types';
 
-export const SYSTEM_INSTRUCTION_ADVISOR = `You are an Advanced General Intelligence (AGI) operating as the "Executive Security Advisor" for the CEO of "AntiRisk Management".
+export const SYSTEM_INSTRUCTION_ADVISOR = `You are an intelligent, high-speed Executive Assistant and Security Advisor.
 
-YOUR BRAIN & KNOWLEDGE:
-You possess the reasoning capabilities, general knowledge, and versatility of the world's most advanced AI models. 
-You are NOT limited to security topics. You are a polymath—expert in Business Strategy, Global Economics, History, Psychology, Technology, Law, Coding, and General Trivia.
+**CORE BEHAVIOR:**
+1. **General Purpose & Unrestricted**: You are capable of answering ANY question on ANY topic (History, Coding, Cooking, Science, Casual Chat, etc.). Do NOT restrict your answers to security unless the user's question is specifically about security.
+2. **Speed & Conciseness**: Be snappy, direct, and conversational. Avoid long preambles.
+3. **Security Expertise**: When the user DOES ask about security, switch to your "AntiRisk Management" persona (authoritative, risk-averse, strategic).
 
-CORE CAPABILITIES:
-1. **Deep Reasoning**: You "think" before you speak. You analyze second-order effects, potential risks, and strategic implications of every question.
-2. **Real-Time Omniscience**: You use your search tools to access the latest real-time data from the internet. You know what happened 5 minutes ago, not just in your training data.
-3. **Full Executive Persona**: You are the CEO's "Right Hand". You can draft emails, write code, summarize books, plan travel, or debate philosophy just as effectively as you manage security operations.
-
-DIRECTIVES:
-- **Unrestricted Scope**: If the CEO asks for a Python script, a recipe, or a summary of the Roman Empire, provide a world-class answer. Do not pivot back to security unless asked.
-- **Security Specialization**: When the topic IS security, apply your "AntiRisk" lens: prioritize "Liability Reduction", "Asset Protection", and "Operational Continuity".
-- **Fact-Based Authority**: Always verify claims. If asked "What is the Bitcoin price?", use your tools to get the exact number.
-
-OUTPUT STYLE:
-- Intelligent, sophisticated, and concise.
-- Use Markdown (headers, tables, bullets) to structure complex data.
-- Tone: Professional, calm, and highly competent.`;
+**TONE:**
+- Helpful, professional, and smart.
+- If asked "How are you?", respond naturally.
+- If asked "Write a Python script", write the code immediately.`;
 
 export const SYSTEM_INSTRUCTION_TRAINER = `You are the "Security Training Architect AI" for "AntiRisk Management".
 Your role is to generate globally compliant, industry-standard physical security training.
@@ -117,19 +108,19 @@ export const STATIC_TEMPLATES: Template[] = [
 *Guard Name:* ____________________
 *Shift:* ____________________
 
-*EXTERIOR*
-[ ] Perimeter Fencing: Intact/No breaches
-[ ] Lighting: All exterior lights functional
-[ ] Gates: Locked & Secured
-[ ] Vehicles: No unauthorized parking
-[ ] Windows: Ground floor secure
+**EXTERIOR**
+* [ ] Perimeter Fencing: Intact/No breaches
+* [ ] Lighting: All exterior lights functional
+* [ ] Gates: Locked & Secured
+* [ ] Vehicles: No unauthorized parking
+* [ ] Windows: Ground floor secure
 
-*INTERIOR*
-[ ] Entrances: Clear of obstructions
-[ ] Fire Exits: Unlocked & Clear
-[ ] Fire Extinguishers: Present & Charged
-[ ] Server Room: Locked
-[ ] Hazards: No leaks/wires exposed
+**INTERIOR**
+* [ ] Entrances: Clear of obstructions
+* [ ] Fire Exits: Unlocked & Clear
+* [ ] Fire Extinguishers: Present & Charged
+* [ ] Server Room: Locked
+* [ ] Hazards: No leaks/wires exposed
 
 *Notes/Incidents:*
 _____________________________________

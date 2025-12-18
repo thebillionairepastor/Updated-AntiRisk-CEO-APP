@@ -7,7 +7,7 @@ import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES, GLOBAL_TRAINING_CATEGORIES } from './constants';
-import { generateAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule } from './services/geminiService';
+import { streamAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule } from './services/geminiService';
 
 function App() {
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
@@ -31,7 +31,7 @@ function App() {
     return saved ? JSON.parse(saved) : [{
       id: 'welcome',
       role: 'model',
-      text: "Hello. I am the AntiRisk Executive Advisor. I am ready to assist with operations, liability reduction, and strategic planning.",
+      text: "Hello. I am the AntiRisk AI. I can assist with security operations, or answer any other questions you have.",
       timestamp: Date.now(),
       isPinned: false
     }];
@@ -97,10 +97,10 @@ function App() {
   });
   // Track which tip is currently being viewed
   const [selectedTipId, setSelectedTipId] = useState<string | null>(null);
-  
   const [isTipLoading, setIsTipLoading] = useState(false);
   const [customTipTopic, setCustomTipTopic] = useState('');
   const [hasCheckedWeeklyTip, setHasCheckedWeeklyTip] = useState(false);
+  const [tipDispatchSuccess, setTipDispatchSuccess] = useState<string | null>(null); // 'whatsapp' | 'email' | null
 
   // --- Effects ---
   useEffect(() => {
@@ -202,23 +202,45 @@ function App() {
       isPinned: false
     };
 
+    // 1. Update UI with User Message immediately
     setMessages(prev => [...prev, userMsg]);
+    const currentInput = inputMessage;
     setInputMessage('');
     setIsAdvisorThinking(true);
 
-    // Pass knowledge base to advisor service
-    const response = await generateAdvisorResponse(messages, inputMessage, knowledgeBase);
-    
-    const aiMsg: ChatMessage = {
-      id: (Date.now() + 1).toString(),
+    // 2. Create a placeholder message for the AI response
+    const aiMsgId = (Date.now() + 1).toString();
+    const initialAiMsg: ChatMessage = {
+      id: aiMsgId,
       role: 'model',
-      text: response.text,
+      text: '', // Starts empty for streaming
       timestamp: Date.now(),
-      sources: response.sources,
       isPinned: false
     };
+    setMessages(prev => [...prev, initialAiMsg]);
 
-    setMessages(prev => [...prev, aiMsg]);
+    // 3. Stream the response
+    // We pass the messages history including the new user message (which isn't in 'messages' var yet)
+    await streamAdvisorResponse(
+      [...messages, userMsg],
+      currentInput,
+      knowledgeBase,
+      (textChunk) => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMsgId 
+            ? { ...msg, text: msg.text + textChunk }
+            : msg
+        ));
+      },
+      (sources) => {
+        setMessages(prev => prev.map(msg => 
+          msg.id === aiMsgId 
+            ? { ...msg, sources: sources }
+            : msg
+        ));
+      }
+    );
+
     setIsAdvisorThinking(false);
   };
 
@@ -400,6 +422,10 @@ function App() {
       return;
     }
 
+    // Show visual success state
+    setTipDispatchSuccess(type);
+    setTimeout(() => setTipDispatchSuccess(null), 2500);
+
     const alertPrefix = `🔔 *WEEKLY SECURITY TRAINING* 🔔\n\n*Date:* ${tip.weekDate}\n*Topic:* ${tip.topic}\n\n`;
     
     let formattedContent = tip.content
@@ -418,11 +444,12 @@ function App() {
     if (type === 'whatsapp') {
       const cleanNumber = userProfile.phoneNumber.replace(/[^0-9]/g, '');
       const whatsappUrl = `https://wa.me/${cleanNumber}?text=${encodeURIComponent(fullText)}`;
-      window.open(whatsappUrl, '_blank');
+      // Small delay to allow the animation to start before opening window
+      setTimeout(() => window.open(whatsappUrl, '_blank'), 300);
     } else {
       const subject = encodeURIComponent(`Weekly Security Tip: ${tip.topic}`);
       const body = encodeURIComponent(`(Full text copied to clipboard. Paste here if content is truncated.)\n\n${fullText}`);
-      window.location.href = `mailto:${userProfile.email}?subject=${subject}&body=${body}`;
+      setTimeout(() => window.location.href = `mailto:${userProfile.email}?subject=${subject}&body=${body}`, 300);
     }
     
     setShowNewTipAlert(null);
@@ -866,15 +893,17 @@ function App() {
               </div>
             </div>
           ))}
-          {isAdvisorThinking && (
-            <div className="flex justify-start">
-              <div className="bg-slate-700 rounded-2xl p-4 rounded-bl-sm flex items-center gap-2">
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"></div>
-                <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"></div>
+          {/* Thinking Indicator inside the chat flow, if the latest message is an empty model message */}
+           {isAdvisorThinking && messages.length > 0 && messages[messages.length - 1].role === 'model' && messages[messages.length - 1].text === '' && (
+              <div className="flex justify-start">
+                 <div className="bg-slate-700 rounded-2xl p-4 rounded-bl-sm flex items-center gap-2">
+                   <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                   <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-100"></div>
+                   <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-200"></div>
+                 </div>
               </div>
-            </div>
-          )}
+           )}
+
           <div ref={chatEndRef} />
         </div>
         <div className="p-4 bg-slate-800 border-t border-slate-700">
@@ -1025,17 +1054,27 @@ function App() {
                   <div className="flex gap-2 w-full sm:w-auto">
                     <button 
                       onClick={() => sendToCEO('whatsapp', weeklyTips[0])}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors shadow-lg shadow-green-900/20"
+                      disabled={!!tipDispatchSuccess}
+                      className={`flex-1 sm:flex-none flex items-center justify-center gap-2 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all duration-300 shadow-lg ${
+                        tipDispatchSuccess === 'whatsapp' 
+                        ? 'bg-green-500 shadow-green-900/20 scale-105' 
+                        : 'bg-green-600 hover:bg-green-700 shadow-green-900/20'
+                      }`}
                     >
-                      <MessageCircle size={16} />
-                      Send to My WhatsApp
+                      {tipDispatchSuccess === 'whatsapp' ? <Check size={16} /> : <MessageCircle size={16} />}
+                      {tipDispatchSuccess === 'whatsapp' ? 'Sent!' : 'Send to My WhatsApp'}
                     </button>
                     <button 
                       onClick={() => sendToCEO('email', weeklyTips[0])}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors"
+                      disabled={!!tipDispatchSuccess}
+                      className={`flex-1 sm:flex-none flex items-center justify-center gap-2 text-white text-xs font-bold px-3 py-2 rounded-lg transition-all duration-300 ${
+                        tipDispatchSuccess === 'email'
+                        ? 'bg-blue-500 scale-105'
+                        : 'bg-slate-700 hover:bg-slate-600'
+                      }`}
                     >
-                      <Mail size={14} />
-                      Email Me
+                      {tipDispatchSuccess === 'email' ? <Check size={14} /> : <Mail size={14} />}
+                      {tipDispatchSuccess === 'email' ? 'Sent!' : 'Email Me'}
                     </button>
                   </div>
                </div>
