@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, Send, Plus, Search, RefreshCw, Download, FileText, ChevronRight, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, ChevronLeft, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, ChevronDown, Eye, Maximize2, Edit3 } from 'lucide-react';
 import Navigation from './components/Navigation';
+import BottomNavigation from './components/BottomNavigation';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
@@ -167,6 +168,15 @@ function App() {
     setShowNewTipAlert(null);
   };
 
+  const handleSaveSettings = () => {
+    setSettingsSaved(true);
+    localStorage.setItem('security_app_profile', JSON.stringify(userProfile));
+    setTimeout(() => {
+      setSettingsSaved(false);
+      setShowSettings(false);
+    }, 800);
+  };
+
   // --- Views ---
   const renderDashboard = () => (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -262,8 +272,6 @@ function App() {
       </div>
     </div>
   );
-
-  // --- Missing View Renders ---
 
   const renderBestPractices = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -622,7 +630,7 @@ function App() {
     </div>
   );
 
-  // --- Missing Modal Renders ---
+  // --- Modal Renders ---
 
   const renderSettingsModal = () => (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
@@ -779,16 +787,42 @@ function App() {
   );
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans pb-20 lg:pb-0">
       <Navigation currentView={currentView} setView={setCurrentView} isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} onOpenSettings={() => setShowSettings(true)} bestPracticesBadge={bpBadgeCount} />
+      
+      <BottomNavigation 
+        currentView={currentView} 
+        setView={setCurrentView} 
+        onOpenMenu={() => setIsMobileMenuOpen(true)}
+        bestPracticesBadge={bpBadgeCount}
+      />
+
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="lg:hidden p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/80 backdrop-blur-md z-30 shadow-xl">
            <div className="flex items-center gap-2"><div className="w-8 h-8 bg-red-700 rounded-md flex items-center justify-center font-bold text-white shadow-lg">AR</div><span className="font-bold text-lg tracking-tight">AntiRisk CEO</span></div>
-           <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-slate-400 active:bg-slate-800 rounded-lg"><Menu size={28} /></button>
+           <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 active:bg-slate-800 rounded-lg"><SettingsIcon size={24} /></button>
         </header>
+        
         <div className="flex-1 overflow-y-auto p-6 lg:p-10 scrollbar-hide bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950">
-          <div className="max-w-6xl mx-auto">
+          <div className="max-w-6xl mx-auto pb-10 lg:pb-0">
             {currentView === View.DASHBOARD && renderDashboard()}
             {currentView === View.ADVISOR && renderAdvisor()}
             {currentView === View.WEEKLY_TIPS && renderWeeklyTips()}
-            {currentView
+            {currentView === View.BEST_PRACTICES && renderBestPractices()}
+            {currentView === View.TRAINING && renderTraining()}
+            {currentView === View.REPORT_ANALYZER && renderReportAnalyzer()}
+            {currentView === View.TOOLKIT && renderToolkit()}
+          </div>
+        </div>
+
+        {showSettings && renderSettingsModal()}
+        {showNewTipAlert && renderNewTipAlertModal()}
+        {showKbModal && renderKbModal()}
+        {quickViewData && renderQuickViewModal()}
+        {showBpToast && <div className="fixed bottom-24 right-6 lg:bottom-6 bg-slate-800/90 backdrop-blur border-l-4 border-blue-500 text-white p-5 rounded-2xl shadow-2xl animate-in slide-in-from-right flex items-center gap-6 z-50"><div><p className="font-bold">Global Briefing Updated</p><p className="text-xs text-slate-400">New physical security standards sourced.</p></div><button onClick={() => { setCurrentView(View.BEST_PRACTICES); setShowBpToast(false); }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-xs font-black">VIEW</button></div>}
+      </main>
+    </div>
+  );
+}
+
+export default App;
