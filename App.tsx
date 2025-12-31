@@ -1,16 +1,20 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Menu, Send, Plus, Search, RefreshCw, FileText, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, Eye, Edit3, Zap } from 'lucide-react';
+import { Menu, Send, Plus, Search, RefreshCw, FileText, ShieldAlert, BookOpen, Globe, Briefcase, Calendar, Save, Trash2, Check, Lightbulb, Printer, Settings as SettingsIcon, MessageCircle, Mail, X, Bell, Database, Upload, Pin, PinOff, BarChart2, Sparkles, Copy, Eye, Edit3, Zap, ArrowRight, Activity, Lock, Key } from 'lucide-react';
 import Navigation from './components/Navigation';
 import BottomNavigation from './components/BottomNavigation';
 import MarkdownRenderer from './components/MarkdownRenderer';
 import ShareButton from './components/ShareButton';
 import IncidentChart from './components/IncidentChart';
+import SplashScreen from './components/SplashScreen';
+import SecurityGate from './components/SecurityGate';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES, GLOBAL_TRAINING_CATEGORIES } from './constants';
 import { streamAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule, getTrainingCoPilotSuggestions } from './services/geminiService';
 
 function App() {
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isLocked, setIsLocked] = useState(true);
   const [currentView, setCurrentView] = useState<View>(View.DASHBOARD);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -125,16 +129,21 @@ function App() {
   const handleTogglePin = (id: string) => { setMessages(prev => prev.map(m => m.id === id ? { ...m, isPinned: !m.isPinned } : m)); };
   
   const handleGenerateTraining = async () => {
-    setIsTrainingLoading(true); setShowTopicSuggestions(false);
-    const content = await generateTrainingModule(trainingRole, trainingTopic, trainingContent);
-    setTrainingContent(content); setIsTrainingLoading(false);
-    setCoPilotSuggestions([]); // Clear old suggestions
+    setIsTrainingLoading(true); 
+    setShowTopicSuggestions(false);
+    const content = await generateTrainingModule(trainingRole, trainingTopic);
+    setTrainingContent(content); 
+    setIsTrainingLoading(false);
+    
+    // Auto-fetch suggestions for a "Fast" feel
+    const suggestions = await getTrainingCoPilotSuggestions(content);
+    setCoPilotSuggestions(suggestions);
   };
 
   const handleAnalyzeReport = async () => {
     if (!reportText) return;
     setIsAnalyzing(true);
-    const result = await analyzeReport(reportText, storedReports.slice(0, 5));
+    const result = await analyzeReport(reportText);
     setAnalysisResult(result);
     setStoredReports(prev => [{ id: Date.now().toString(), timestamp: Date.now(), dateStr: new Date().toLocaleDateString(), content: reportText, analysis: result }, ...prev]);
     setIsAnalyzing(false);
@@ -158,19 +167,14 @@ function App() {
     setShowNewTipAlert(newTip);
   };
 
-  const handleFetchCoPilotSuggestions = async () => {
-    if (!trainingContent) return;
-    setIsCoPilotLoading(true);
-    const suggestions = await getTrainingCoPilotSuggestions(trainingContent);
-    setCoPilotSuggestions(suggestions);
-    setIsCoPilotLoading(false);
-  };
-
   const handleRefineWithPrompt = async (prompt: string) => {
     setIsRefining(true);
     const refined = await refineTrainingModule(trainingContent, prompt);
     setTrainingContent(refined);
     setIsRefining(false);
+    // Refresh suggestions after refinement
+    const suggestions = await getTrainingCoPilotSuggestions(refined);
+    setCoPilotSuggestions(suggestions);
   };
 
   const sendToCEO = (type: 'whatsapp' | 'email', tip: WeeklyTip) => {
@@ -181,6 +185,11 @@ function App() {
     if (type === 'whatsapp' && userProfile.phoneNumber) window.open(`https://wa.me/${userProfile.phoneNumber}?text=${encodeURIComponent(text)}`, '_blank');
     else if (type === 'email' && userProfile.email) window.location.href = `mailto:${userProfile.email}?subject=${encodeURIComponent(tip.topic)}&body=${encodeURIComponent(text)}`;
     setShowNewTipAlert(null);
+  };
+
+  const handlePinRegistration = (newPin: string) => {
+    setUserProfile(prev => ({ ...prev, password: newPin }));
+    setIsLocked(false);
   };
 
   // --- Views ---
@@ -311,99 +320,108 @@ function App() {
 
   const renderTraining = () => (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1 bg-slate-800/50 rounded-2xl border border-slate-700 p-6 space-y-6">
-          <h3 className="font-bold text-white mb-4 flex items-center gap-2"><BookOpen size={20} className="text-blue-400" />Builder Settings</h3>
-          <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Target Role</label>
-            <select value={trainingRole} onChange={(e) => setTrainingRole(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200">
+      <div className="grid lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-1 space-y-4">
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-5 space-y-4">
+            <h3 className="font-bold text-white flex items-center gap-2 text-sm"><BookOpen size={16} className="text-blue-400" />Builder</h3>
+            <select value={trainingRole} onChange={(e) => setTrainingRole(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200">
               {Object.values(SecurityRole).map(role => <option key={role} value={role}>{role}</option>)}
             </select>
+            <div className="relative">
+              <input type="text" value={trainingTopic} onChange={(e) => setTrainingTopic(e.target.value)} placeholder="Topic..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200" />
+              <button onClick={async () => { setIsSuggestingTopics(true); setSuggestedTopics(await getTrainingSuggestions([])); setShowTopicSuggestions(true); setIsSuggestingTopics(false); }} className="absolute right-2 top-1.5 text-blue-400 p-1"><Sparkles size={16} /></button>
+              {showTopicSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden">
+                  {suggestedTopics.map((topic, idx) => (
+                    <button key={idx} onClick={() => { setTrainingTopic(topic); setShowTopicSuggestions(false); }} className="w-full px-4 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-700 border-b border-slate-700 last:border-0">{topic}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <button onClick={handleGenerateTraining} disabled={isTrainingLoading || !trainingTopic} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-xs">
+              {isTrainingLoading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />} 
+              Build Fast
+            </button>
           </div>
-          <div className="relative">
-            <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Topic</label>
-            <input type="text" value={trainingTopic} onChange={(e) => setTrainingTopic(e.target.value)} placeholder="e.g. Tactical Comm" className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-slate-200" />
-            <button onClick={async () => { setIsSuggestingTopics(true); const suggestions = await getTrainingSuggestions(storedReports); setSuggestedTopics(suggestions); setShowTopicSuggestions(true); setIsSuggestingTopics(false); }} className="absolute right-2 top-8 text-blue-400 p-1"><Sparkles size={18} className={isSuggestingTopics ? 'animate-pulse' : ''} /></button>
-            {showTopicSuggestions && (
-              <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-20 overflow-hidden">
-                {suggestedTopics.map((topic, idx) => (
-                  <button key={idx} onClick={() => { setTrainingTopic(topic); setShowTopicSuggestions(false); }} className="w-full px-4 py-3 text-left text-sm text-slate-300 hover:bg-slate-700 transition-colors border-b border-slate-700 last:border-0">{topic}</button>
-                ))}
-              </div>
-            )}
-          </div>
-          <button onClick={handleGenerateTraining} disabled={isTrainingLoading || !trainingTopic} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all">{isTrainingLoading ? <RefreshCw className="animate-spin" size={20} /> : <Plus size={20} />}Generate Module</button>
-          
+
           {trainingContent && (
-            <div className="pt-4 border-t border-slate-700/50">
-               <h4 className="text-xs font-black text-blue-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                 <ShieldAlert size={14} /> AI Co-Pilot
+            <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-5 space-y-4">
+               <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center gap-2">
+                 <Zap size={14} className="animate-pulse" /> Flash Accelerator
                </h4>
-               <div className="space-y-3">
+               <div className="grid grid-cols-1 gap-2">
                  {coPilotSuggestions.length > 0 ? (
                     coPilotSuggestions.map((s, i) => (
-                      <button 
-                        key={i} 
-                        onClick={() => handleRefineWithPrompt(s)}
-                        disabled={isRefining}
-                        className="w-full text-left p-3 bg-blue-600/10 border border-blue-500/20 rounded-xl text-[11px] text-slate-300 hover:bg-blue-600/20 hover:border-blue-500/40 transition-all flex items-start gap-2 group"
-                      >
-                        <Zap size={14} className="text-yellow-400 shrink-0 mt-0.5 group-hover:scale-110 transition-transform" />
+                      <button key={i} onClick={() => handleRefineWithPrompt(s)} disabled={isRefining} className="text-left p-3 bg-blue-600/10 border border-blue-500/10 rounded-xl text-[10px] text-slate-300 hover:bg-blue-600/20 hover:border-blue-500/40 transition-all flex items-start gap-2 group">
+                        <Activity size={12} className="text-blue-400 shrink-0 mt-0.5 group-hover:scale-125 transition-transform" />
                         {s}
                       </button>
                     ))
                  ) : (
-                    <button 
-                      onClick={handleFetchCoPilotSuggestions}
-                      disabled={isCoPilotLoading}
-                      className="w-full py-3 border border-dashed border-slate-700 rounded-xl text-[11px] text-slate-500 hover:text-slate-300 hover:border-slate-500 transition-all flex items-center justify-center gap-2"
-                    >
-                      {isCoPilotLoading ? <RefreshCw className="animate-spin" size={14} /> : <Sparkles size={14} />}
-                      Analyze Draft for Intelligence Gaps
-                    </button>
+                    <div className="py-2 text-[10px] text-slate-500 italic text-center">Architect is analyzing current draft...</div>
                  )}
+               </div>
+               
+               <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                  <button onClick={() => handleRefineWithPrompt("Add a realistic high-stakes scenario")} disabled={isRefining} className="w-full py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-[10px] font-bold text-slate-400 flex items-center justify-center gap-2"><ArrowRight size={12} /> Add Field Scenario</button>
+                  <button onClick={() => handleRefineWithPrompt("Add a legal compliance section")} disabled={isRefining} className="w-full py-2 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-[10px] font-bold text-slate-400 flex items-center justify-center gap-2"><ArrowRight size={12} /> Legal Check</button>
                </div>
             </div>
           )}
         </div>
-        <div className="lg:col-span-2 bg-slate-800/50 rounded-3xl border border-slate-700 h-full min-h-[500px] flex flex-col overflow-hidden">
+
+        <div className="lg:col-span-3 bg-slate-800/50 rounded-3xl border border-slate-700 h-full min-h-[600px] flex flex-col overflow-hidden shadow-2xl relative">
           {trainingContent ? (
             <>
               <div className="p-4 border-b border-slate-700 bg-slate-900/40 flex justify-between items-center">
-                <span className="text-xs font-bold text-slate-400">ARCHITECT OUTPUT</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+                  <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live Architect Output</span>
+                </div>
                 <div className="flex gap-2">
                    <ShareButton title={`Training: ${trainingTopic}`} content={trainingContent} />
-                   <button onClick={() => { setSaveSuccess(true); setTimeout(() => setSaveSuccess(false), 2000); }} className="bg-slate-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-2">{saveSuccess ? <Check size={16} /> : <Save size={16} />}Save</button>
+                   <button onClick={() => { setSaveSuccess(true); setTimeout(() => setSaveSuccess(false), 2000); }} className="bg-slate-700 text-white px-4 py-2 rounded-lg text-xs flex items-center gap-2">{saveSuccess ? <Check size={14} /> : <Save size={14} />}Save</button>
                 </div>
               </div>
+              
               <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
                 <MarkdownRenderer content={trainingContent} />
                 {isRefining && (
-                  <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm flex flex-col items-center justify-center z-10 animate-in fade-in duration-300">
-                    <RefreshCw className="text-blue-500 animate-spin mb-4" size={48} />
-                    <p className="font-black text-blue-400 tracking-tighter text-xl">Advisor is refining draft...</p>
+                  <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px] flex items-center justify-center z-20 animate-in fade-in duration-300">
+                    <div className="bg-slate-900 border border-blue-500/30 p-8 rounded-3xl shadow-2xl flex flex-col items-center gap-4">
+                      <Zap className="text-blue-500 animate-bounce" size={40} />
+                      <p className="font-black text-blue-400 text-lg uppercase tracking-widest animate-pulse">Accelerating...</p>
+                    </div>
                   </div>
                 )}
               </div>
+
               <div className="p-4 bg-slate-900/60 border-t border-slate-700 flex gap-2">
                 <input 
                   type="text" 
                   value={refineInstruction} 
                   onChange={(e) => setRefineInstruction(e.target.value)} 
-                  placeholder="Ask Advisor to elaborate or modify (e.g., 'Add a legal liability section')" 
-                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-blue-500" 
+                  placeholder="Tell Advisor what to change (Super Fast)..." 
+                  className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-xs focus:outline-none focus:border-blue-500" 
+                  onKeyDown={(e) => e.key === 'Enter' && refineInstruction && handleRefineWithPrompt(refineInstruction)}
                 />
                 <button 
                   onClick={() => { handleRefineWithPrompt(refineInstruction); setRefineInstruction(''); }}
                   disabled={!refineInstruction || isRefining}
-                  className="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-xl transition-all"
+                  className="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-xl transition-all shadow-lg active:scale-90"
                 >
-                  <Send size={20} />
+                  <Send size={18} />
                 </button>
               </div>
             </>
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-slate-600 opacity-20"><BookOpen size={100} /><p className="font-bold">Training Workbench Ready</p></div>
+            <div className="h-full flex flex-col items-center justify-center text-slate-700/30 space-y-6">
+              <Zap size={120} />
+              <div className="text-center">
+                <h3 className="text-2xl font-black uppercase tracking-[0.2em]">Workbench Offline</h3>
+                <p className="text-sm font-medium">Input a topic to initiate high-speed generation.</p>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -458,16 +476,37 @@ function App() {
 
   // --- Modals ---
   const renderSettingsModal = () => (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl">
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center"><h3 className="text-xl font-bold text-white flex items-center gap-2"><SettingsIcon size={20} className="text-slate-400" />CEO Alerts</h3><button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={24} /></button></div>
-        <div className="p-6 space-y-6">
+    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+      <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900"><h3 className="text-xl font-bold text-white flex items-center gap-2"><SettingsIcon size={20} className="text-slate-400" />CEO Alert & Security</h3><button onClick={() => setShowSettings(false)} className="text-slate-500 hover:text-white"><X size={24} /></button></div>
+        <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto scrollbar-hide">
           <div className="space-y-4">
-            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">CEO Name</label><input type="text" value={userProfile.name} onChange={(e) => setUserProfile({...userProfile, name: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white" /></div>
-            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">WhatsApp</label><input type="text" value={userProfile.phoneNumber} onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})} placeholder="+1234567890" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white" /></div>
-            <div><label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email</label><input type="text" value={userProfile.email} onChange={(e) => setUserProfile({...userProfile, email: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-white" /></div>
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">Profile Details</h4>
+            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">CEO Name</label><input type="text" value={userProfile.name} onChange={(e) => setUserProfile({...userProfile, name: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none" /></div>
+            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">WhatsApp</label><input type="text" value={userProfile.phoneNumber} onChange={(e) => setUserProfile({...userProfile, phoneNumber: e.target.value})} placeholder="+1234567890" className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none" /></div>
+            <div><label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Email</label><input type="text" value={userProfile.email} onChange={(e) => setUserProfile({...userProfile, email: e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none" /></div>
           </div>
-          <button onClick={() => { setSettingsSaved(true); setTimeout(() => { setSettingsSaved(false); setShowSettings(false); }, 1500); }} className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2">{settingsSaved ? <Check size={20} /> : <Save size={20} />}{settingsSaved ? 'Saved' : 'Update Profile'}</button>
+
+          <div className="space-y-4 pt-4 border-t border-slate-800">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">Security Vault PIN</h4>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Access PIN (4 Digits)</label>
+              <div className="relative">
+                 <input 
+                   type="password" 
+                   maxLength={4} 
+                   value={userProfile.password || ''} 
+                   onChange={(e) => setUserProfile({...userProfile, password: e.target.value.replace(/\D/g, '').substring(0, 4)})} 
+                   placeholder="Enter 4 digit PIN" 
+                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:border-blue-500 focus:outline-none tracking-[0.5em]" 
+                 />
+                 <Key size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-600" />
+              </div>
+              <p className="text-[9px] text-slate-500 mt-2 ml-1">This PIN will be required every time the app opens.</p>
+            </div>
+          </div>
+
+          <button onClick={() => { setSettingsSaved(true); setTimeout(() => { setSettingsSaved(false); setShowSettings(false); }, 1500); }} className="w-full bg-blue-600 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 active:scale-95 transition-all">{settingsSaved ? <Check size={20} /> : <Save size={20} />}{settingsSaved ? 'Security Updated' : 'Sync Profile'}</button>
         </div>
       </div>
     </div>
@@ -510,16 +549,46 @@ function App() {
     </div>
   );
 
+  if (isInitializing) {
+    return <SplashScreen onFinish={() => setIsInitializing(false)} />;
+  }
+
+  // Auth Gate check after Splash Screen
+  if (isLocked) {
+    return (
+      <SecurityGate 
+        storedPin={userProfile.password} 
+        userName={userProfile.name} 
+        onUnlock={() => setIsLocked(false)}
+        onRegister={handlePinRegistration}
+      />
+    );
+  }
+
   return (
-    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 lg:pb-0">
+    <div className="flex min-h-screen bg-slate-950 text-slate-100 font-sans pb-24 lg:pb-0 animate-in fade-in duration-1000">
       <Navigation currentView={currentView} setView={setCurrentView} isMobileMenuOpen={isMobileMenuOpen} closeMobileMenu={() => setIsMobileMenuOpen(false)} onOpenSettings={() => setShowSettings(true)} bestPracticesBadge={bpBadgeCount} />
       
       <BottomNavigation currentView={currentView} setView={setCurrentView} onOpenMenu={() => setIsMobileMenuOpen(true)} bestPracticesBadge={bpBadgeCount} />
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="lg:hidden p-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/80 backdrop-blur-md z-30 shadow-xl">
-           <div className="flex items-center gap-2"><div className="w-8 h-8 bg-red-700 rounded-md flex items-center justify-center font-bold text-white shadow-lg">AR</div><span className="font-bold text-lg tracking-tight">AntiRisk CEO</span></div>
-           <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 active:bg-slate-800 rounded-lg"><SettingsIcon size={24} /></button>
+           <div className="flex items-center gap-2">
+             <div className="w-8 h-8 bg-black rounded-md flex items-center justify-center border border-white/10 shadow-lg">
+                <svg viewBox="0 0 200 200" className="w-6 h-6">
+                  <path d="M100 10 L10 170 L190 170 Z" fill="white" />
+                  <circle cx="100" cy="100" r="55" fill="black" />
+                  <text x="100" y="118" fontSize="60" fontWeight="bold" fontFamily="serif" textAnchor="middle" fill="white">AR</text>
+                </svg>
+             </div>
+             <span className="font-bold text-lg tracking-tight">AntiRisk CEO</span>
+           </div>
+           <button onClick={() => setShowSettings(true)} className="p-2 text-slate-400 active:bg-slate-800 rounded-lg relative">
+             <SettingsIcon size={24} />
+             {(!userProfile.password || userProfile.password.length !== 4) && (
+               <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-600 rounded-full border-2 border-slate-900 animate-ping" />
+             )}
+           </button>
         </header>
         
         <div className="flex-1 overflow-y-auto p-6 lg:p-10 scrollbar-hide bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/10 via-slate-950 to-slate-950">

@@ -44,7 +44,7 @@ const setInCache = (key: string, text: string, sources?: any[]) => {
   responseCache.set(key, { text, sources, timestamp: Date.now() });
 };
 
-// Advisor Chat with History and Knowledge Base (Streaming Version)
+// Advisor Chat with History (Pro for deep reasoning)
 export const streamAdvisorResponse = async (
   history: ChatMessage[], 
   currentMessage: string,
@@ -52,17 +52,6 @@ export const streamAdvisorResponse = async (
   onChunk: (text: string) => void,
   onSources: (sources: Array<{ title: string; url: string }>) => void
 ): Promise<void> => {
-  const historySignature = history.slice(-3).map(m => ({ r: m.role, t: m.text }));
-  const kbSignature = knowledgeBase.map(d => d.id).sort().join(',');
-  const cacheKey = getCacheKey('advisor_stream', historySignature, currentMessage, kbSignature);
-
-  const cached = getFromCache(cacheKey);
-  if (cached) {
-    onChunk(cached.text);
-    if (cached.sources) onSources(cached.sources);
-    return;
-  }
-
   try {
     let fullResponseText = "";
     let capturedSources: Array<{ title: string; url: string }> = [];
@@ -81,12 +70,12 @@ export const streamAdvisorResponse = async (
       }));
 
     const response = await ai.models.generateContentStream({
-      model: 'gemini-3-pro-preview', // Pro for advisor reasoning
+      model: 'gemini-3-pro-preview',
       contents: apiContents,
       config: {
         systemInstruction,
         temperature: 0.7,
-        thinkingConfig: { thinkingBudget: 4000 } // Enable thinking for deeper strategy
+        thinkingConfig: { thinkingBudget: 4000 }
       }
     });
 
@@ -106,17 +95,13 @@ export const streamAdvisorResponse = async (
          onSources(capturedSources);
       }
     }
-    
-    if (fullResponseText.trim()) {
-      setInCache(cacheKey, fullResponseText, capturedSources.length > 0 ? capturedSources : undefined);
-    }
   } catch (error: any) {
     console.error("Advisor Stream Error:", error);
     onChunk(`\n\n*[Error: ${error.message || "Network Error"}.]*`);
   }
 };
 
-// Best Practices Grounding (Explicit Search)
+// High-Speed Best Practices
 export const fetchBestPractices = async (topic: string): Promise<{ text: string; sources?: any[] }> => {
   const cacheKey = getCacheKey('bp', topic.toLowerCase().trim());
   const cached = getFromCache(cacheKey);
@@ -124,8 +109,8 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Find the latest global security best practices regarding: "${topic}". Summarize for a Security CEO.`,
+      model: 'gemini-3-flash-preview', // Switched to Flash for speed
+      contents: `Global security best practices: "${topic}". CEO Executive Summary.`,
       config: { tools: [{ googleSearch: {} }] },
     });
 
@@ -133,160 +118,121 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
       ?.filter((chunk: any) => chunk.web?.uri)
       .map((chunk: any) => ({ title: chunk.web.title, url: chunk.web.uri })) || [];
 
-    const text = response.text || "No best practices found.";
+    const text = response.text || "No intelligence found.";
     setInCache(cacheKey, text, sources);
     return { text, sources };
   } catch (error) {
-    return { text: "Unable to fetch online best practices." };
+    return { text: "Search service unavailable." };
   }
 };
 
-// Training Generator
-export const generateTrainingModule = async (audience: string, topic: string, previousContext?: string): Promise<string> => {
-  const cacheKey = getCacheKey('training', audience, topic, previousContext ? simpleHash(previousContext) : 'none');
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached.text;
-
+// High-Speed Training Generator
+export const generateTrainingModule = async (audience: string, topic: string): Promise<string> => {
   try {
-    const prompt = `Create a professional security training module for ${audience} on the topic: "${topic}". Include AntiRisk signature.`;
+    const prompt = `Generate a high-impact security training for ${audience}: "${topic}". Be concise and professional.`;
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-flash-preview', // Speed priority
       contents: prompt,
-      config: { systemInstruction: SYSTEM_INSTRUCTION_TRAINER }
-    });
-    const text = response.text || "";
-    setInCache(cacheKey, text);
-    return text;
-  } catch (error) {
-    return "Error generating training content.";
-  }
-};
-
-// Refine Training Module
-export const refineTrainingModule = async (currentContent: string, instruction: string): Promise<string> => {
-  const cacheKey = getCacheKey('refine', simpleHash(currentContent), instruction);
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached.text;
-
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: `CURRENT: ${currentContent}\nINSTRUCTION: ${instruction}\nRewrite training module.`,
-      config: { systemInstruction: SYSTEM_INSTRUCTION_TRAINER }
-    });
-    const text = response.text || "";
-    setInCache(cacheKey, text);
-    return text;
-  } catch (error) {
-    return "Error refining content.";
-  }
-};
-
-// Training Co-Pilot Suggestions
-export const getTrainingCoPilotSuggestions = async (draftContent: string): Promise<string[]> => {
-  const cacheKey = getCacheKey('copilot_suggestions', simpleHash(draftContent));
-  const cached = getFromCache(cacheKey);
-  if (cached) return JSON.parse(cached.text);
-
-  try {
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Review this security training draft and provide 3 short, actionable suggestions for the CEO to improve it (e.g., 'Expand on legal liability', 'Add a scenario for night shifts'). 
-      Draft: ${draftContent.substring(0, 2000)}
-      Return ONLY the suggestions separated by "|||".`,
       config: { 
-        thinkingConfig: { thinkingBudget: 2000 }
+        systemInstruction: SYSTEM_INSTRUCTION_TRAINER,
+        temperature: 0.5 // Lower temperature for faster, more focused generation
       }
     });
-    const text = response.text || "";
-    const suggestions = text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
-    setInCache(cacheKey, JSON.stringify(suggestions));
-    return suggestions;
+    return response.text || "Module generation failed.";
   } catch (error) {
-    return ["Add legal context", "Include more drills", "Simplify language"];
+    return "Error generating training.";
   }
 };
 
-// Training Topic Suggestions
-export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
-  const lastReportId = recentReports.length > 0 ? recentReports[0].id : 'none';
-  const cacheKey = getCacheKey('suggestions', recentReports.length, lastReportId); 
-  const cached = getFromCache(cacheKey);
-  if (cached) return JSON.parse(cached.text);
+// Super Fast Refinement
+export const refineTrainingModule = async (currentContent: string, instruction: string): Promise<string> => {
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview', // Speed priority
+      contents: `ACT: Security Architect. MODIFY THIS: ${currentContent}\n\nREASON: ${instruction}\n\nREWRITE NOW.`,
+      config: { 
+        systemInstruction: SYSTEM_INSTRUCTION_TRAINER,
+        temperature: 0.4
+      }
+    });
+    return response.text || currentContent;
+  } catch (error) {
+    return currentContent;
+  }
+};
 
+// High-Speed Training Co-Pilot Suggestions
+export const getTrainingCoPilotSuggestions = async (draftContent: string): Promise<string[]> => {
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview', // Flash for instant results
+      contents: `Quickly review this security draft. Suggest 3 one-line expert improvements for a CEO.
+      Draft excerpt: ${draftContent.substring(0, 1500)}
+      Format: S1|||S2|||S3`,
+      config: { temperature: 0.1 } // High speed/consistency
+    });
+    const text = response.text || "";
+    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
+  } catch (error) {
+    return ["Add compliance details", "Include emergency scenarios", "Simplify for entry-level guards"];
+  }
+};
+
+// High-Speed Topic Suggestions
+export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Suggest 3 security training topics based on modern trends. Return ONLY as "Topic A|||Topic B|||Topic C"`,
+      contents: `Suggest 3 viral security training topics for 2025. Format: T1|||T2|||T3`,
     });
     const text = response.text || "";
-    const suggestions = text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
-    setInCache(cacheKey, JSON.stringify(suggestions));
-    return suggestions;
+    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
   } catch (error) {
-    return ["Access Control", "Report Writing", "Emergency Response"];
+    return ["Advanced De-escalation", "AI in Surveillance", "Crowd Control Strategy"];
   }
 };
 
-// Weekly Tip Generator
+// Weekly Tip Generator (High Speed)
 export const generateWeeklyTip = async (topic?: string): Promise<string> => {
-  const cacheKey = getCacheKey('weekly_tip', topic || 'random');
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached.text;
-
   try {
     const userPrompt = topic 
-      ? `Generate a weekly training tip about: "${topic}".`
-      : `Pick a relevant modern security topic. Generate a weekly training module.`;
+      ? `Generate CEO Weekly Tip: "${topic}".`
+      : `Generate a random high-priority security tip.`;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: userPrompt,
-      config: { systemInstruction: SYSTEM_INSTRUCTION_WEEKLY_TIP }
+      config: { systemInstruction: SYSTEM_INSTRUCTION_WEEKLY_TIP, temperature: 0.6 }
     });
-    const text = response.text || "";
-    if (text) setInCache(cacheKey, text);
-    return text;
+    return response.text || "";
   } catch (error) {
     return "Error generating tip.";
   }
 };
 
-// Report Analyzer
-export const analyzeReport = async (reportText: string, previousReports: StoredReport[] = []): Promise<string> => {
-  const cacheKey = getCacheKey('analyze', simpleHash(reportText), previousReports.length);
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached.text;
-
+// Report Analyzer (Pro for Liability)
+export const analyzeReport = async (reportText: string): Promise<string> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: `Analyze report: ${reportText}\nProvide: Summary, Root Cause, Preventative measures.`,
+      model: 'gemini-3-pro-preview', // Pro for legal/liability analysis
+      contents: `Analyze: ${reportText}\nProvide Liability Assessment and Root Cause.`,
     });
-    const text = response.text || "";
-    setInCache(cacheKey, text);
-    return text;
+    return response.text || "";
   } catch (error) {
-    return "Error analyzing report.";
+    return "Analysis failed.";
   }
 };
 
-// Weekly Insights Generator
+// Executive Weekly Briefing (Pro for synthesis)
 export const generateWeeklyInsights = async (reports: StoredReport[]): Promise<string> => {
-  const cacheKey = getCacheKey('weekly_insights', reports.length, reports[0]?.id || 'none');
-  const cached = getFromCache(cacheKey);
-  if (cached) return cached.text;
-
   try {
     const combined = reports.map(r => `[${r.dateStr}] ${r.content}`).join('\n');
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-pro-preview',
-      contents: `Synthesize reports: ${combined}\nProvide CEO Briefing.`,
+      contents: `CEO Briefing for reports: ${combined}`,
     });
-    const text = response.text || "";
-    setInCache(cacheKey, text);
-    return text;
+    return response.text || "";
   } catch (error) {
-    return "Error generating insights.";
+    return "Intelligence synthesis failed.";
   }
 };

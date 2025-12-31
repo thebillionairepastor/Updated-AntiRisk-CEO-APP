@@ -61,6 +61,7 @@ export interface UserProfile {
   name: string;
   phoneNumber: string; // International format for WhatsApp
   email: string;
+  password?: string; // Access PIN
 }
 
 export interface KnowledgeDocument {
