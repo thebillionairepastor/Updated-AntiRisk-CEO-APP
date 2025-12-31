@@ -182,6 +182,31 @@ export const refineTrainingModule = async (currentContent: string, instruction: 
   }
 };
 
+// Training Co-Pilot Suggestions
+export const getTrainingCoPilotSuggestions = async (draftContent: string): Promise<string[]> => {
+  const cacheKey = getCacheKey('copilot_suggestions', simpleHash(draftContent));
+  const cached = getFromCache(cacheKey);
+  if (cached) return JSON.parse(cached.text);
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-pro-preview',
+      contents: `Review this security training draft and provide 3 short, actionable suggestions for the CEO to improve it (e.g., 'Expand on legal liability', 'Add a scenario for night shifts'). 
+      Draft: ${draftContent.substring(0, 2000)}
+      Return ONLY the suggestions separated by "|||".`,
+      config: { 
+        thinkingConfig: { thinkingBudget: 2000 }
+      }
+    });
+    const text = response.text || "";
+    const suggestions = text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
+    setInCache(cacheKey, JSON.stringify(suggestions));
+    return suggestions;
+  } catch (error) {
+    return ["Add legal context", "Include more drills", "Simplify language"];
+  }
+};
+
 // Training Topic Suggestions
 export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
   const lastReportId = recentReports.length > 0 ? recentReports[0].id : 'none';
