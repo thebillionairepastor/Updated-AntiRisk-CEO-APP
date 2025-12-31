@@ -10,7 +10,7 @@ import SplashScreen from './components/SplashScreen';
 import SecurityGate from './components/SecurityGate';
 import { View, ChatMessage, Template, SecurityRole, StoredReport, WeeklyTip, UserProfile, KnowledgeDocument } from './types';
 import { STATIC_TEMPLATES, GLOBAL_TRAINING_CATEGORIES } from './constants';
-import { streamAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule, getTrainingCoPilotSuggestions } from './services/geminiService';
+import { streamAdvisorResponse, generateTrainingModule, analyzeReport, fetchBestPractices, generateWeeklyInsights, generateWeeklyTip, getTrainingSuggestions, refineTrainingModule, getTrainingCoPilotSuggestions, searchTrainingTopics } from './services/geminiService';
 
 function App() {
   const [isInitializing, setIsInitializing] = useState(true);
@@ -192,6 +192,19 @@ function App() {
     setIsLocked(false);
   };
 
+  const handleTopicSearch = async (val: string) => {
+    setTrainingTopic(val);
+    if (val.length > 2) {
+      setIsSuggestingTopics(true);
+      const searchResults = await searchTrainingTopics(val);
+      setSuggestedTopics(searchResults);
+      setShowTopicSuggestions(true);
+      setIsSuggestingTopics(false);
+    } else {
+      setShowTopicSuggestions(false);
+    }
+  };
+
   // --- Views ---
   const renderDashboard = () => (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -323,25 +336,68 @@ function App() {
       <div className="grid lg:grid-cols-4 gap-6">
         <div className="lg:col-span-1 space-y-4">
           <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-5 space-y-4">
-            <h3 className="font-bold text-white flex items-center gap-2 text-sm"><BookOpen size={16} className="text-blue-400" />Builder</h3>
+            <h3 className="font-bold text-white flex items-center gap-2 text-sm"><BookOpen size={16} className="text-blue-400" />Training Builder</h3>
+            <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Target Audience</label>
             <select value={trainingRole} onChange={(e) => setTrainingRole(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200">
               {Object.values(SecurityRole).map(role => <option key={role} value={role}>{role}</option>)}
             </select>
+            
             <div className="relative">
-              <input type="text" value={trainingTopic} onChange={(e) => setTrainingTopic(e.target.value)} placeholder="Topic..." className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-200" />
-              <button onClick={async () => { setIsSuggestingTopics(true); setSuggestedTopics(await getTrainingSuggestions([])); setShowTopicSuggestions(true); setIsSuggestingTopics(false); }} className="absolute right-2 top-1.5 text-blue-400 p-1"><Sparkles size={16} /></button>
+              <label className="block text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] mb-1">Intelligence Search (1M+ Bank)</label>
+              <div className="relative group">
+                <input 
+                  type="text" 
+                  value={trainingTopic} 
+                  onChange={(e) => handleTopicSearch(e.target.value)} 
+                  onFocus={() => { if(suggestedTopics.length > 0) setShowTopicSuggestions(true); }}
+                  placeholder="e.g. Nerc-CIP, ASIS Standards..." 
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-200 focus:border-blue-500 transition-all outline-none" 
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                   {isSuggestingTopics ? <RefreshCw className="animate-spin text-blue-500" size={14} /> : <Search size={14} className="text-slate-500" />}
+                </div>
+              </div>
+              
               {showTopicSuggestions && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-30 overflow-hidden">
-                  {suggestedTopics.map((topic, idx) => (
-                    <button key={idx} onClick={() => { setTrainingTopic(topic); setShowTopicSuggestions(false); }} className="w-full px-4 py-2.5 text-left text-xs text-slate-300 hover:bg-slate-700 border-b border-slate-700 last:border-0">{topic}</button>
-                  ))}
+                <div className="absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-[100] overflow-hidden animate-in zoom-in-95 duration-200">
+                  <div className="max-h-[300px] overflow-y-auto scrollbar-hide">
+                    {suggestedTopics.length > 0 ? (
+                      suggestedTopics.map((topic, idx) => (
+                        <button 
+                          key={idx} 
+                          onClick={() => { setTrainingTopic(topic); setShowTopicSuggestions(false); }} 
+                          className="w-full px-5 py-3.5 text-left text-[11px] font-bold text-slate-300 hover:bg-slate-700 hover:text-white border-b border-slate-700/50 last:border-0 transition-colors flex items-center gap-3"
+                        >
+                          <Activity size={12} className="text-blue-500" />
+                          {topic}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-slate-500 text-[10px] uppercase font-bold tracking-widest">No matching practices</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
-            <button onClick={handleGenerateTraining} disabled={isTrainingLoading || !trainingTopic} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95 transition-all text-xs">
-              {isTrainingLoading ? <RefreshCw className="animate-spin" size={16} /> : <Zap size={16} />} 
-              Build Fast
+
+            <button onClick={handleGenerateTraining} disabled={isTrainingLoading || !trainingTopic} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl flex items-center justify-center gap-3 shadow-lg active:scale-95 transition-all text-xs uppercase tracking-widest">
+              {isTrainingLoading ? <RefreshCw className="animate-spin" size={18} /> : <Zap size={18} />} 
+              Architect Training
             </button>
+          </div>
+
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700 p-5">
+            <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-4">Core Standards Browse</h4>
+            <div className="space-y-2 max-h-[200px] overflow-y-auto scrollbar-hide">
+              {GLOBAL_TRAINING_CATEGORIES.map((cat, i) => (
+                <div key={i} className="space-y-1">
+                  <p className="text-[9px] font-black text-blue-500 uppercase px-1">{cat.category}</p>
+                  {cat.topics.slice(0, 3).map((t, ti) => (
+                    <button key={ti} onClick={() => setTrainingTopic(t)} className="w-full text-left px-2 py-1.5 rounded-lg text-[10px] text-slate-400 hover:bg-slate-700 hover:text-white truncate">{t}</button>
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
 
           {trainingContent && (
@@ -419,7 +475,7 @@ function App() {
               <Zap size={120} />
               <div className="text-center">
                 <h3 className="text-2xl font-black uppercase tracking-[0.2em]">Workbench Offline</h3>
-                <p className="text-sm font-medium">Input a topic to initiate high-speed generation.</p>
+                <p className="text-sm font-medium">Search the 1M knowledge bank above to begin.</p>
               </div>
             </div>
           )}

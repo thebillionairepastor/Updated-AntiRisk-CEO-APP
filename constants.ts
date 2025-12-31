@@ -204,7 +204,9 @@ export const GLOBAL_TRAINING_CATEGORIES = [
       "Radio Communication Discipline",
       "Visitor Management SOPs",
       "Vehicle Search Procedures",
-      "Uniform & Personal Appearance"
+      "Uniform & Personal Appearance",
+      "Standard Operating Procedures (SOP) Compliance",
+      "Report Writing Excellence"
     ]
   },
   {
@@ -217,7 +219,9 @@ export const GLOBAL_TRAINING_CATEGORIES = [
       "Hazardous Material Spills",
       "Elevator Entrapment Procedures",
       "Power Failure / Blackout Protocol",
-      "Earthquake Preparedness"
+      "Earthquake Preparedness",
+      "Triage Basics for Security Staff",
+      "Dealing with Chemical Hazards"
     ]
   },
   {
@@ -229,7 +233,9 @@ export const GLOBAL_TRAINING_CATEGORIES = [
       "Dealing with Intoxicated Persons",
       "Media Relations at Crime Scenes",
       "Ethics and Professional Conduct",
-      "Cultural Sensitivity Awareness"
+      "Cultural Sensitivity Awareness",
+      "Managing Mental Health Crises in Public",
+      "Body Language Analysis"
     ]
   },
   {
@@ -240,7 +246,9 @@ export const GLOBAL_TRAINING_CATEGORIES = [
       "Crime Scene Preservation",
       "Evidence Handling Basics",
       "GDPR & Data Privacy for CCTV",
-      "Trespass Laws & Removal"
+      "Trespass Laws & Removal",
+      "Human Rights in Security Ops",
+      "Anti-Bribery and Corruption Policies"
     ]
   },
   {
@@ -250,18 +258,37 @@ export const GLOBAL_TRAINING_CATEGORIES = [
       "Body Worn Camera (BWC) Usage",
       "Alarm System Response",
       "X-Ray Scanner Operation",
-      "Metal Detector (Wand) Screening"
+      "Metal Detector (Wand) Screening",
+      "AI Surveillance Ethics",
+      "Drone Monitoring & Counter-UAS",
+      "Vulnerability Assessment Tools"
     ]
   },
   {
-    category: "F. Tactical & Specialized",
+    category: "F. Critical Industrial Practices",
     topics: [
-      "Executive Protection Basics",
+      "ASIS International Standards (POPP)",
+      "ISO 18788 Security Management",
+      "Maritime Security (ISPS Code) Basics",
+      "Aviation Security (ICAO Annex 17)",
+      "Critical Infrastructure (Nerc-CIP) Compliance",
+      "Logistics & Supply Chain Security (TAPA)",
+      "High-Value Asset Escort Protocols",
+      "Industrial Espionage Countermeasures",
+      "Environmental & Safety (HSE) for Security"
+    ]
+  },
+  {
+    category: "G. High-End Specialty",
+    topics: [
+      "Executive Protection (Close Protection)",
       "Crowd Control Dynamics",
       "Suspicious Package Identification",
       "Counter-Surveillance Detection",
-      "Loss Prevention (Retail)",
-      "Anti-Terrorism Awareness"
+      "Loss Prevention (Retail Specialty)",
+      "Anti-Terrorism Awareness",
+      "Hostile Reconnaissance Identification",
+      "Kidnap & Ransom (K&R) Response"
     ]
   }
 ];

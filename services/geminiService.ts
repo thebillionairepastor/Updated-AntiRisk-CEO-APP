@@ -44,6 +44,45 @@ const setInCache = (key: string, text: string, sources?: any[]) => {
   responseCache.set(key, { text, sources, timestamp: Date.now() });
 };
 
+/**
+ * RAG RETRIEVAL ENGINE
+ * Performs a client-side keyword-based retrieval to find relevant context.
+ * Titles are weighted 5x more than content for relevance.
+ */
+const findRelevantDocs = (query: string, docs: KnowledgeDocument[], limit = 3): KnowledgeDocument[] => {
+  if (docs.length === 0) return [];
+  
+  // Tokenize query, remove common short words
+  const terms = query.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(t => t.length > 2);
+
+  if (terms.length === 0) return docs.slice(0, limit);
+
+  const scoredDocs = docs.map(doc => {
+    let score = 0;
+    const title = doc.title.toLowerCase();
+    const content = doc.content.toLowerCase();
+    
+    terms.forEach(term => {
+      // Title match (High Weight)
+      if (title.includes(term)) score += 10;
+      // Content match (Lower Weight)
+      const contentOccurrences = (content.match(new RegExp(term, 'g')) || []).length;
+      score += contentOccurrences * 2;
+    });
+    
+    return { doc, score };
+  });
+
+  return scoredDocs
+    .filter(s => s.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(s => s.doc)
+    .slice(0, limit);
+};
+
 // Advisor Chat with History (Pro for deep reasoning)
 export const streamAdvisorResponse = async (
   history: ChatMessage[], 
@@ -57,9 +96,12 @@ export const streamAdvisorResponse = async (
     let capturedSources: Array<{ title: string; url: string }> = [];
     let systemInstruction = SYSTEM_INSTRUCTION_ADVISOR;
     
-    if (knowledgeBase.length > 0) {
-      const kbContent = knowledgeBase.map(doc => `--- DOCUMENT: ${doc.title} ---\n${doc.content}`).join('\n\n');
-      systemInstruction += `\n\n[INTERNAL KNOWLEDGE BASE]\n${kbContent}`;
+    // Perform Dynamic Retrieval (RAG)
+    const relevantDocs = findRelevantDocs(currentMessage, knowledgeBase);
+    
+    if (relevantDocs.length > 0) {
+      const kbContent = relevantDocs.map(doc => `--- RELEVANT DOCUMENT: ${doc.title} ---\n${doc.content}`).join('\n\n');
+      systemInstruction += `\n\n[CONTEXT FROM EXECUTIVE MEMORY]\nUse the following internal documents to inform your response if relevant. Prioritize this information over general knowledge for site-specific queries:\n${kbContent}`;
     }
 
     const apiContents = history
@@ -109,7 +151,7 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
 
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Switched to Flash for speed
+      model: 'gemini-3-flash-preview',
       contents: `Global security best practices: "${topic}". CEO Executive Summary.`,
       config: { tools: [{ googleSearch: {} }] },
     });
@@ -129,13 +171,13 @@ export const fetchBestPractices = async (topic: string): Promise<{ text: string;
 // High-Speed Training Generator
 export const generateTrainingModule = async (audience: string, topic: string): Promise<string> => {
   try {
-    const prompt = `Generate a high-impact security training for ${audience}: "${topic}". Be concise and professional.`;
+    const prompt = `Generate a high-impact security training for ${audience}: "${topic}". Be concise and professional. Use industry standards like ASIS or ISO where applicable.`;
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Speed priority
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: { 
         systemInstruction: SYSTEM_INSTRUCTION_TRAINER,
-        temperature: 0.5 // Lower temperature for faster, more focused generation
+        temperature: 0.5
       }
     });
     return response.text || "Module generation failed.";
@@ -148,7 +190,7 @@ export const generateTrainingModule = async (audience: string, topic: string): P
 export const refineTrainingModule = async (currentContent: string, instruction: string): Promise<string> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Speed priority
+      model: 'gemini-3-flash-preview',
       contents: `ACT: Security Architect. MODIFY THIS: ${currentContent}\n\nREASON: ${instruction}\n\nREWRITE NOW.`,
       config: { 
         systemInstruction: SYSTEM_INSTRUCTION_TRAINER,
@@ -165,11 +207,11 @@ export const refineTrainingModule = async (currentContent: string, instruction: 
 export const getTrainingCoPilotSuggestions = async (draftContent: string): Promise<string[]> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview', // Flash for instant results
+      model: 'gemini-3-flash-preview',
       contents: `Quickly review this security draft. Suggest 3 one-line expert improvements for a CEO.
       Draft excerpt: ${draftContent.substring(0, 1500)}
       Format: S1|||S2|||S3`,
-      config: { temperature: 0.1 } // High speed/consistency
+      config: { temperature: 0.1 }
     });
     const text = response.text || "";
     return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
@@ -178,15 +220,35 @@ export const getTrainingCoPilotSuggestions = async (draftContent: string): Promi
   }
 };
 
+/**
+ * DEEP INTELLIGENCE TOPIC SEARCH
+ * Simulates a massive data bank by querying the LLM for specialized topics.
+ */
+export const searchTrainingTopics = async (query: string): Promise<string[]> => {
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: `Access the 1 million security knowledge bank. Find 10 niche, high-impact industrial security training topics related to: "${query}".
+      Focus on global best practices for security guards and supervisors.
+      Format: T1|||T2|||T3...`,
+      config: { temperature: 0.7 }
+    });
+    const text = response.text || "";
+    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 10);
+  } catch (error) {
+    return ["Standard Operating Procedures", "Crowd Control", "Incident Reporting"];
+  }
+};
+
 // High-Speed Topic Suggestions
 export const getTrainingSuggestions = async (recentReports: StoredReport[]): Promise<string[]> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: `Suggest 3 viral security training topics for 2025. Format: T1|||T2|||T3`,
+      contents: `Suggest 8 high-priority security training topics for 2025 across core, emergency, and tactical categories. Format: T1|||T2|||T3...`,
     });
     const text = response.text || "";
-    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 3);
+    return text.split('|||').map(t => t.trim()).filter(t => t.length > 0).slice(0, 8);
   } catch (error) {
     return ["Advanced De-escalation", "AI in Surveillance", "Crowd Control Strategy"];
   }
@@ -214,7 +276,7 @@ export const generateWeeklyTip = async (topic?: string): Promise<string> => {
 export const analyzeReport = async (reportText: string): Promise<string> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview', // Pro for legal/liability analysis
+      model: 'gemini-3-pro-preview',
       contents: `Analyze: ${reportText}\nProvide Liability Assessment and Root Cause.`,
     });
     return response.text || "";
